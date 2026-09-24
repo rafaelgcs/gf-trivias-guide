@@ -1,11 +1,11 @@
 <?php
 
-use Illuminate\Support\Facades\Route;
-use App\Http\Controllers\TriviaController;
-use App\Http\Controllers\GuideController;
-use App\Http\Controllers\CommentController;
 use App\Http\Controllers\AuthController;
+use App\Http\Controllers\CommentController;
+use App\Http\Controllers\GuideController;
 use App\Http\Controllers\ProgressController;
+use App\Http\Controllers\TriviaController;
+use Illuminate\Support\Facades\Route;
 
 // Public Trivia Browser & Wiki Routes (NO LOGIN REQUIRED)
 Route::get('/', [TriviaController::class, 'index'])->name('trivias.index');
@@ -30,12 +30,12 @@ Route::middleware('guest')->group(function () {
 Route::middleware('auth')->group(function () {
     Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
     Route::get('/perfil', [AuthController::class, 'profile'])->name('profile');
-    
+
     // Community publishing & commenting
     Route::get('/guias-novo/criar', [GuideController::class, 'create'])->name('guides.create');
     Route::post('/guias', [GuideController::class, 'store'])->name('guides.store');
     Route::post('/comentarios', [CommentController::class, 'store'])->name('comments.store');
-});
 
-// Toggle Progress API (Supports both Guest LocalStorage & Auth User DB)
-Route::post('/api/progress/toggle', [ProgressController::class, 'toggle'])->name('progress.toggle');
+    // Toggle Progress API (Authenticated Users Only)
+    Route::post('/api/progress/toggle', [ProgressController::class, 'toggle'])->name('progress.toggle');
+});

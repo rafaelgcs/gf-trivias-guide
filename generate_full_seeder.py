@@ -1,15 +1,16 @@
 import os
 import re
-import json
+import html
 
 def clean_text(raw_html):
-    clean = re.sub(r'<[^>]+>', ' ', raw_html)
+    raw = html.unescape(raw_html)
+    clean = re.sub(r'<[^>]+>', ' ', raw)
     clean = ' '.join(clean.split())
     return clean.strip()
 
 sheet_files = {
     'Kaslow': 'sheets/Kaslow.html',
-    'Ilya': '/Users/rafaelgcs/.gemini/antigravity/brain/a99f55ef-e9ce-4e9f-ba7d-20c796375258/.system_generated/steps/228/content.md',
+    'Ilya': 'last_user_prompt.html',
     'Jale': 'sheets/Jale.html',
     'Elsaland': 'sheets/Elsaland.html',
     'Baía Azul': 'sheets/Baia_Azul.html',
@@ -20,27 +21,56 @@ sheet_files = {
     'Ilha Sprite': 'sheets/Ilha_Sprite.html',
 }
 
+def extract_npc_coords(inst):
+    if not inst:
+        return None, None, None
+
+    coords_match = re.search(r'\(([0-9]{1,4})\,\s*([0-9]{1,4})\)', inst)
+    coords = f"{coords_match.group(1)}, {coords_match.group(2)}" if coords_match else None
+
+    item_match = re.search(r'[<«\[]([^>»\]]+)[>»\]]|item\s+[\"\'«<\[]([^\"\'»>\]]+)[\"\'»>\]]', inst, re.IGNORECASE)
+    item = None
+    if item_match:
+        item = item_match.group(1) or item_match.group(2)
+
+    npc = None
+    npc_match = re.search(r'(?:Fale com|Vá até|Procure por|Fale com o|Fale com a|Compre com|Troque com|NPC)\s+([A-ZÀ-Ú][a-zA-ZÀ-ú0-9\sº-]{2,35}?)(?=\s*\([0-9]+|\s+e\s+|\s+para\s+|\s*,|\s*$)', inst)
+    if npc_match:
+        npc = npc_match.group(1).strip()
+        if npc.startswith('NPC '):
+            npc = npc[4:].strip()
+
+    return npc, coords, item
+
+def escape_str(s):
+    if not s:
+        return 'null'
+    escaped = s.replace("\\", "\\\\").replace("'", "\\'")
+    return f"'{escaped}'"
+
 all_parsed = {}
+grand_total_trivias = 0
+grand_total_steps = 0
 
 for city, filepath in sheet_files.items():
-    if not os.path.exists(filepath): continue
+    if not os.path.exists(filepath):
+        print(f"Skipping missing file: {filepath}")
+        continue
+
     with open(filepath, 'r', encoding='utf-8') as f:
         text = f.read()
-    trs = re.findall(r'<tr[^>]*>(.*?)</tr>', text, re.DOTALL)
 
+    trs = re.findall(r'<tr[^>]*>(.*?)</tr>', text, re.DOTALL)
     city_maps = {}
     current_map = 'Geral'
     current_trivia = None
 
     for tr in trs:
-        # Check map header
         map_match = re.search(r'colspan=\"[0-9]+\"[^>]*>(.*?)</td>', tr, re.DOTALL)
         if map_match:
             m_title = clean_text(map_match.group(1))
-            if m_title and 'Trivia Nome' not in m_title and 'Como fazer' not in m_title and 'Trívia' != m_title:
+            if m_title and not any(k in m_title for k in ['Trivia', 'Trívia', 'Como fazer', 'Situação', 'Atualização', 'Wikia', 'Funcionamento', 'GS']):
                 current_map = m_title
-                if current_map not in city_maps:
-                    city_maps[current_map] = []
                 current_trivia = None
                 continue
 
@@ -51,92 +81,91 @@ for city, filepath in sheet_files.items():
         clean_tds = [clean_text(td) for td in tds]
         if not clean_tds or not any(clean_tds):
             continue
-        
-        # Skip header rows
-        concat_row = ' '.join(clean_tds)
-        if 'Trivia Nome' in concat_row or 'Como fazer' in concat_row or concat_row == 'Trívia NPC Como fazer':
+
+        concat = ' '.join(clean_tds)
+        if any(k in concat for k in ['Trivia Nome', 'Como fazer', '100% (', 'Última Atualização', 'O que são Trívias', 'Página no Wikia', 'Funcionamento:', 'GS Swain']):
             continue
 
-        # Parse based on column length
-        if len(clean_tds) == 3:
-            title = clean_tds[0]
-            if title and not title.isdigit():
-                current_trivia = {
-                    'map': current_map,
-                    'item_title': title,
-                    'history_title': title,
-                    'steps': [{'step': '1', 'inst': clean_tds[2]}]
-                }
-                if current_map not in city_maps: city_maps[current_map] = []
-                city_maps[current_map].append(current_trivia)
-            elif current_trivia and clean_tds[2]:
-                step_num = clean_tds[0] if clean_tds[0].isdigit() else str(len(current_trivia['steps'])+1)
-                current_trivia['steps'].append({'step': step_num, 'inst': clean_tds[2]})
+        if len(clean_tds) == 2 and clean_tds[0] == '' and clean_tds[1]:
+            if not any(k in clean_tds[1].lower() for k in ['fale', 'vá', 'derrote', 'compre', 'use', 'clique', 'aproxime', 'mate', 'procure', 'dê', 'obtenha', 'passeie', 'retorne', 'em seguida', 'depois']) and len(clean_tds[1]) < 50:
+                current_map = clean_tds[1]
+                current_trivia = None
+                continue
 
-        elif len(clean_tds) == 4:
+        if len(clean_tds) == 1 and clean_tds[0]:
+            if not any(k in clean_tds[0].lower() for k in ['fale', 'vá', 'derrote', 'compre', 'use', 'clique', 'aproxime', 'mate', 'procure', 'dê', 'obtenha', 'passeie', 'retorne', 'em seguida', 'depois']) and len(clean_tds[0]) < 50:
+                current_map = clean_tds[0]
+                current_trivia = None
+                continue
+
+        is_step_continuation = False
+        step_num = '1'
+        inst_text = ''
+
+        if current_trivia is not None:
+            if clean_tds[0].isdigit():
+                is_step_continuation = True
+                step_num = clean_tds[0]
+                inst_text = clean_tds[1] if len(clean_tds) > 1 else ''
+            elif len(clean_tds) >= 2 and clean_tds[0] == '' and clean_tds[1] and (clean_tds[1].isdigit() or any(k in clean_tds[1].lower() for k in ['fale', 'vá', 'derrote', 'compre', 'use', 'clique', 'aproxime', 'mate', 'procure', 'dê', 'obtenha', 'passeie', 'retorne', 'em seguida', 'depois'])):
+                if clean_tds[1].isdigit() and len(clean_tds) >= 3:
+                    is_step_continuation = True
+                    step_num = clean_tds[1]
+                    inst_text = clean_tds[2]
+                elif any(k in clean_tds[1].lower() for k in ['fale', 'vá', 'derrote', 'compre', 'use', 'clique', 'aproxime', 'mate', 'procure', 'dê', 'obtenha', 'passeie', 'retorne', 'em seguida', 'depois']):
+                    is_step_continuation = True
+                    step_num = str(len(current_trivia['steps']) + 1)
+                    inst_text = clean_tds[1]
+
+        if is_step_continuation and inst_text:
+            current_trivia['steps'].append({'step': step_num, 'inst': inst_text})
+            continue
+
+        item_t = ''
+        hist_t = ''
+        inst = ''
+        s_num = '1'
+
+        if len(clean_tds) >= 4:
             item_t = clean_tds[0]
             hist_t = clean_tds[1]
-            step_col = clean_tds[2]
-            inst_col = clean_tds[3]
-
-            if (item_t or hist_t) and not item_t.isdigit() and not hist_t.isdigit():
-                t_item = item_t if item_t else hist_t
-                t_hist = hist_t if hist_t else item_t
-                step_num = step_col if step_col.isdigit() else '1'
-                current_trivia = {
-                    'map': current_map,
-                    'item_title': t_item,
-                    'history_title': t_hist,
-                    'steps': [{'step': step_num, 'inst': inst_col}]
-                }
-                if current_map not in city_maps: city_maps[current_map] = []
-                city_maps[current_map].append(current_trivia)
-            elif current_trivia and inst_col:
-                step_num = step_col if step_col.isdigit() else str(len(current_trivia['steps'])+1)
-                current_trivia['steps'].append({'step': step_num, 'inst': inst_col})
-
-        elif len(clean_tds) >= 5:
+            if clean_tds[2].isdigit():
+                s_num = clean_tds[2]
+                inst = clean_tds[3]
+            elif len(clean_tds) >= 5 and clean_tds[3].isdigit():
+                s_num = clean_tds[3]
+                inst = clean_tds[4]
+            else:
+                inst = clean_tds[-1]
+        elif len(clean_tds) == 3:
             item_t = clean_tds[0]
-            hist_t = clean_tds[1]
-            inst_col = clean_tds[-1] if len(clean_tds) >= 5 else clean_tds[4]
+            if clean_tds[1].isdigit():
+                s_num = clean_tds[1]
+                inst = clean_tds[2]
+            else:
+                hist_t = clean_tds[1]
+                inst = clean_tds[2]
 
-            if (item_t or hist_t) and not item_t.isdigit() and not hist_t.isdigit():
-                t_item = item_t if item_t else hist_t
-                t_hist = hist_t if hist_t else item_t
-                current_trivia = {
-                    'map': current_map,
-                    'item_title': t_item,
-                    'history_title': t_hist,
-                    'steps': [{'step': '1', 'inst': inst_col}]
-                }
-                if current_map not in city_maps: city_maps[current_map] = []
-                city_maps[current_map].append(current_trivia)
-            elif current_trivia and inst_col:
-                step_num = str(len(current_trivia['steps'])+1)
-                current_trivia['steps'].append({'step': step_num, 'inst': inst_col})
+        if item_t or hist_t:
+            t_item = item_t if item_t else hist_t
+            t_hist = hist_t if hist_t else item_t
+            current_trivia = {
+                'map': current_map,
+                'item_title': t_item,
+                'history_title': t_hist,
+                'steps': [{'step': s_num, 'inst': inst}] if inst else []
+            }
+            if current_map not in city_maps:
+                city_maps[current_map] = []
+            city_maps[current_map].append(current_trivia)
 
     city_maps = {k: v for k, v in city_maps.items() if len(v) > 0}
     all_parsed[city] = city_maps
 
-def extract_npc_coords(inst):
-    coords_match = re.search(r'\(([0-9]{1,4})\,\s*([0-9]{1,4})\)', inst)
-    coords = f"{coords_match.group(1)}, {coords_match.group(2)}" if coords_match else None
-
-    item_match = re.search(r'[<«\[]([^>»\]]+)[>»\]]', inst)
-    item = item_match.group(1) if item_match else None
-
-    npc = None
-    npc_match = re.search(r'(?:Fale com|Vá até|Procure por|Fale com o|Fale com a|NPC)\s+([A-Z][a-zA-L\sº-]{2,30}?)(?=\s*\([0-9]+|\s+e\s+|\s+para\s+|\s*$)', inst)
-    if npc_match:
-        npc = npc_match.group(1).strip()
-
-    return npc, coords, item
-
-def escape_str(s):
-    if not s:
-        return 'null'
-    escaped = s.replace("'", "\\'")
-    return f"'{escaped}'"
+    c_trivias = sum(len(v) for v in city_maps.values())
+    c_steps = sum(len(t['steps']) for v in city_maps.values() for t in v)
+    grand_total_trivias += c_trivias
+    grand_total_steps += c_steps
 
 # Generate PHP Seeder
 php_code = """<?php
@@ -147,17 +176,20 @@ use App\\Models\\Zone;
 use App\\Models\\Trivia;
 use App\\Models\\TriviaStep;
 use App\\Models\\User;
-use App\\Models\\Guide;
-use App\\Models\\Comment;
 use Illuminate\\Database\\Seeder;
-use Illuminate\\Support\\Str;
 use Illuminate\\Support\\Facades\\Hash;
 
 class TriviaSeeder extends Seeder
 {
     public function run(): void
     {
-        // 1. Primary Curator User (Rafael G C Santos)
+        \Illuminate\Support\Facades\Schema::disableForeignKeyConstraints();
+        TriviaStep::truncate();
+        Trivia::truncate();
+        Zone::truncate();
+        \Illuminate\Support\Facades\Schema::enableForeignKeyConstraints();
+
+        // Primary Curator User
         $user = User::firstOrCreate(
             ['email' => 'rafael.santos@grandfantasia.wiki'],
             [
@@ -170,8 +202,6 @@ class TriviaSeeder extends Seeder
 """
 
 sort_idx = 1
-total_trivias_count = 0
-
 for city_name, maps in all_parsed.items():
     php_code += f"            // ==================== {city_name.upper()} ====================\n"
     for map_name, t_list in maps.items():
@@ -188,7 +218,6 @@ for city_name, maps in all_parsed.items():
         sort_idx += 1
 
         for t in t_list:
-            total_trivias_count += 1
             item_t = escape_str(t['item_title'])
             hist_t = escape_str(t['history_title'])
             php_code += f"""                    [
@@ -237,11 +266,11 @@ php_code += """        ];
                 foreach ($steps as $sData) {
                     TriviaStep::create([
                         'trivia_id' => $trivia->id,
-                        'step_number' => $sData['step_number'] ?? $sData['step'] ?? 1,
-                        'npc_name' => $sData['npc_name'] ?? $sData['npc'] ?? null,
-                        'coordinates' => $sData['coordinates'] ?? $sData['coords'] ?? null,
-                        'item_required' => $sData['item_required'] ?? $sData['item'] ?? null,
-                        'instruction' => $sData['instruction'] ?? $sData['inst'] ?? '',
+                        'step_number' => $sData['step_number'] ?? 1,
+                        'npc_name' => $sData['npc_name'] ?? null,
+                        'coordinates' => $sData['coordinates'] ?? null,
+                        'item_required' => $sData['item_required'] ?? null,
+                        'instruction' => $sData['instruction'] ?? '',
                     ]);
                 }
             }
@@ -253,4 +282,4 @@ php_code += """        ];
 with open('database/seeders/TriviaSeeder.php', 'w', encoding='utf-8') as f:
     f.write(php_code)
 
-print(f"Successfully generated database/seeders/TriviaSeeder.php with {total_trivias_count} trivias across all cities!")
+print(f"Successfully generated database/seeders/TriviaSeeder.php with {grand_total_trivias} trivias and {grand_total_steps} steps!")

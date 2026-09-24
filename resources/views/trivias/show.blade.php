@@ -68,7 +68,7 @@
 
                     <div class="flex-grow space-y-2">
                         <p class="text-slate-200 text-sm sm:text-base leading-relaxed">
-                            {!! preg_replace('/<([^>]+)>/', '<span class="text-indigo-300 font-semibold">&lt;$1&gt;</span>', e($step->instruction)) !!}
+                            {!! $step->formatted_instruction !!}
                         </p>
 
                         <div class="flex flex-wrap items-center gap-2 pt-1 text-xs">
@@ -209,6 +209,14 @@
     }
 
     async function toggleTriviaCompletion(triviaId) {
+        if (!IS_LOGGED_IN) {
+            showToast('🔒 Faça login para marcar trívias e salvar seu progresso!');
+            setTimeout(() => {
+                window.location.href = '{{ route("login") }}';
+            }, 1200);
+            return;
+        }
+
         let currentProgress = getStoredProgress();
         let isDone = currentProgress.includes(triviaId);
 
@@ -218,11 +226,10 @@
             currentProgress.push(triviaId);
         }
 
-        saveStoredProgress(currentProgress);
         updateCardUI(triviaId, !isDone);
 
         try {
-            await fetch('{{ route("progress.toggle") }}', {
+            const response = await fetch('{{ route("progress.toggle") }}', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -230,11 +237,15 @@
                 },
                 body: JSON.stringify({ trivia_id: triviaId })
             });
+            const data = await response.json();
+            if (data.success) {
+                showToast(!isDone ? 'Trívia marcada como concluída! 🎉' : 'Trívia desmarcada!');
+            } else {
+                showToast(data.message || 'Erro ao salvar progresso.');
+            }
         } catch (e) {
-            console.log('Progress saved.');
+            console.error('Progress error:', e);
         }
-
-        showToast(!isDone ? 'Trívia marcada como concluída! 🎉' : 'Trívia desmarcada!');
     }
 
     document.addEventListener('DOMContentLoaded', () => {

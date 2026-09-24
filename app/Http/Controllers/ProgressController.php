@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Trivia;
 use App\Models\UserProgress;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -17,12 +16,11 @@ class ProgressController extends Controller
 
         $triviaId = $request->input('trivia_id');
 
-        if (!Auth::check()) {
+        if (! Auth::check()) {
             return response()->json([
-                'success' => true,
-                'mode' => 'guest',
-                'message' => 'Progresso salvo no navegador via localStorage.'
-            ]);
+                'success' => false,
+                'message' => 'Faça login para salvar o seu progresso.',
+            ], 401);
         }
 
         $userId = Auth::id();

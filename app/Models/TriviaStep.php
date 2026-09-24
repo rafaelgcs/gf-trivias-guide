@@ -13,4 +13,22 @@ class TriviaStep extends Model
     {
         return $this->belongsTo(Trivia::class);
     }
+
+    public function getFormattedInstructionAttribute(): string
+    {
+        if (empty($this->instruction)) {
+            return '';
+        }
+
+        $safe = e($this->instruction);
+
+        // Format items wrapped in <...> or &lt;...&gt;
+        $safe = preg_replace('/&lt;([^&]+)&gt;/', '<span class="text-indigo-300 font-semibold">&lt;$1&gt;</span>', $safe);
+        // Format items wrapped in «...»
+        $safe = preg_replace('/«([^»]+)»/', '<span class="text-indigo-300 font-semibold">«$1»</span>', $safe);
+        // Format items wrapped in [...]
+        $safe = preg_replace('/\[([^\]]+)\]/', '<span class="text-amber-300 font-semibold">[$1]</span>', $safe);
+
+        return $safe;
+    }
 }

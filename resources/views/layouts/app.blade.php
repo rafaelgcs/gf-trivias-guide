@@ -145,8 +145,7 @@
                         class="px-3.5 py-2 rounded-lg text-sm font-medium transition-all {{ request()->routeIs('credits') ? 'bg-indigo-600/20 text-indigo-400 border border-indigo-500/30' : 'text-slate-300 hover:text-white hover:bg-slate-800/50' }}">
                         ✨ Créditos
                     </a>
-                    <a target="_blank" rel="noreferrer"
-                        href="https://grandfantasia.fandom.com/pt-br/wiki/Tr%25C3%25ADvias"
+                    <a target="_blank" rel="noreferrer" href="https://grandfantasia.fandom.com/pt-br/wiki/Trívias"
                         class="px-3 py-2 rounded-lg text-xs font-medium text-slate-400 hover:text-indigo-300 flex items-center gap-1 transition-colors">
                         🌐 Wikia
                         <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -284,7 +283,7 @@
                         class="text-indigo-300 hover:text-white transition-colors font-medium">✨ Página de Créditos</a>
                     <span>•</span>
                     <a target="_blank" rel="noreferrer"
-                        href="https://grandfantasia.fandom.com/pt-br/wiki/Tr%25C3%25ADvias"
+                        href="https://grandfantasia.fandom.com/pt-br/wiki/P%C3%A1gina_principal"
                         class="hover:text-indigo-400 transition-colors underline">Wikia Fandom</a>
                 </div>
             </div>
